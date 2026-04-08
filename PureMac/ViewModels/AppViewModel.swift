@@ -15,7 +15,7 @@ class AppViewModel: ObservableObject {
     @Published var currentScanCategory: String = ""
     @Published var showCleanConfirmation = false
     @Published var lastCleanedDate: Date?
-    @Published var selectedItems: Set<UUID> = []
+    @Published var deselectedItems: Set<UUID> = []
 
     var scheduler = SchedulerService()
     private let scanEngine = ScanEngine()
@@ -33,6 +33,48 @@ class AppViewModel: ObservableObject {
 
     var allResults: [CategoryResult] {
         CleaningCategory.scannable.compactMap { categoryResults[$0] }.filter { $0.totalSize > 0 }
+    }
+
+    // MARK: - Selection
+
+    func isItemSelected(_ item: CleanableItem) -> Bool {
+        !deselectedItems.contains(item.id)
+    }
+
+    func toggleItem(_ item: CleanableItem) {
+        if deselectedItems.contains(item.id) {
+            deselectedItems.remove(item.id)
+        } else {
+            deselectedItems.insert(item.id)
+        }
+    }
+
+    func selectAllInCategory(_ category: CleaningCategory) {
+        guard let result = categoryResults[category] else { return }
+        for item in result.items {
+            deselectedItems.remove(item.id)
+        }
+    }
+
+    func deselectAllInCategory(_ category: CleaningCategory) {
+        guard let result = categoryResults[category] else { return }
+        for item in result.items {
+            deselectedItems.insert(item.id)
+        }
+    }
+
+    func selectedSizeInCategory(_ category: CleaningCategory) -> Int64 {
+        guard let result = categoryResults[category] else { return 0 }
+        return result.items.filter { isItemSelected($0) }.reduce(0) { $0 + $1.size }
+    }
+
+    func selectedCountInCategory(_ category: CleaningCategory) -> Int {
+        guard let result = categoryResults[category] else { return 0 }
+        return result.items.filter { isItemSelected($0) }.count
+    }
+
+    var totalSelectedSize: Int64 {
+        allResults.flatMap { $0.items }.filter { isItemSelected($0) }.reduce(0) { $0 + $1.size }
     }
 
     // MARK: - Init
@@ -108,7 +150,7 @@ class AppViewModel: ObservableObject {
     func cleanAll() {
         guard !scanState.isActive else { return }
 
-        let itemsToClean = allResults.flatMap { $0.items.filter { $0.isSelected } }
+        let itemsToClean = allResults.flatMap { $0.items }.filter { isItemSelected($0) }
         guard !itemsToClean.isEmpty else { return }
 
         scanState = .cleaning(progress: 0)
@@ -141,11 +183,14 @@ class AppViewModel: ObservableObject {
     func cleanCategory(_ category: CleaningCategory) {
         guard let result = categoryResults[category], !scanState.isActive else { return }
 
+        let selectedItems = result.items.filter { isItemSelected($0) }
+        guard !selectedItems.isEmpty else { return }
+
         scanState = .cleaning(progress: 0)
         cleanProgress = 0
 
         Task {
-            let cleanResult = await cleaningEngine.cleanCategory(result) { [weak self] progress in
+            let cleanResult = await cleaningEngine.cleanItems(selectedItems) { [weak self] progress in
                 Task { @MainActor [weak self] in
                     self?.cleanProgress = progress
                     self?.scanState = .cleaning(progress: progress)

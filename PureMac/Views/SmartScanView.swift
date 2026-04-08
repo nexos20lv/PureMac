@@ -349,9 +349,9 @@ struct SmartScanView: View {
                 .disabled(true)
 
             case .completed:
-                if vm.totalJunkSize > 0 {
+                if vm.totalSelectedSize > 0 {
                     GradientActionButton(
-                        title: "Clean (\(ByteCountFormatter.string(fromByteCount: vm.totalJunkSize, countStyle: .file)))",
+                        title: "Clean (\(ByteCountFormatter.string(fromByteCount: vm.totalSelectedSize, countStyle: .file)))",
                         icon: "trash.fill",
                         gradient: AppGradients.accent
                     ) {
@@ -465,56 +465,108 @@ struct DiskStatCard: View {
 // MARK: - Result Row (Clickable)
 
 struct ResultRow: View {
+    @EnvironmentObject var vm: AppViewModel
     let result: CategoryResult
     let onTap: () -> Void
 
     @State private var isHovering = false
 
+    var isCategorySelected: Bool {
+        vm.selectedCountInCategory(result.category) > 0
+    }
+
+    var isFullySelected: Bool {
+        vm.selectedCountInCategory(result.category) == result.itemCount
+    }
+
+    var selectedSize: Int64 {
+        vm.selectedSizeInCategory(result.category)
+    }
+
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
+        HStack(spacing: 12) {
+            // Category checkbox
+            Button(action: {
+                withAnimation(.pmSmooth) {
+                    if isFullySelected {
+                        vm.deselectAllInCategory(result.category)
+                    } else {
+                        vm.selectAllInCategory(result.category)
+                    }
+                }
+            }) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(result.category.color.opacity(0.15))
-                        .frame(width: 28, height: 28)
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(isCategorySelected ? result.category.color : Color.pmTextMuted, lineWidth: 1.5)
+                        .frame(width: 18, height: 18)
 
-                    Image(systemName: result.category.icon)
-                        .font(.system(size: 12))
-                        .foregroundColor(result.category.color)
+                    if isFullySelected {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(result.category.color)
+                            .frame(width: 18, height: 18)
+
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                    } else if isCategorySelected {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(result.category.color)
+                            .frame(width: 18, height: 18)
+
+                        Image(systemName: "minus")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                    }
                 }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(result.category.rawValue)
-                        .font(.pmBody)
-                        .foregroundColor(.pmTextPrimary)
-
-                    Text("\(result.itemCount) items")
-                        .font(.system(size: 10))
-                        .foregroundColor(.pmTextMuted)
-                }
-
-                Spacer()
-
-                Text(result.formattedSize)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(result.category.color)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(isHovering ? result.category.color : .pmTextMuted)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isHovering ? Color.pmCardHover : Color.pmCard.opacity(0.4))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isHovering ? result.category.color.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+
+            // Category icon + info (clickable to navigate)
+            Button(action: onTap) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(result.category.color.opacity(isCategorySelected ? 0.15 : 0.05))
+                            .frame(width: 28, height: 28)
+
+                        Image(systemName: result.category.icon)
+                            .font(.system(size: 12))
+                            .foregroundColor(isCategorySelected ? result.category.color : .pmTextMuted)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(result.category.rawValue)
+                            .font(.pmBody)
+                            .foregroundColor(isCategorySelected ? .pmTextPrimary : .pmTextMuted)
+
+                        Text("\(vm.selectedCountInCategory(result.category))/\(result.itemCount) items")
+                            .font(.system(size: 10))
+                            .foregroundColor(.pmTextMuted)
+                    }
+
+                    Spacer()
+
+                    Text(ByteCountFormatter.string(fromByteCount: selectedSize, countStyle: .file))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundColor(isCategorySelected ? result.category.color : .pmTextMuted)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(isHovering ? result.category.color : .pmTextMuted)
+                }
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isHovering ? Color.pmCardHover : Color.pmCard.opacity(0.4))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isHovering ? result.category.color.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
         .onHover { h in
             withAnimation(.pmSmooth) { isHovering = h }
         }

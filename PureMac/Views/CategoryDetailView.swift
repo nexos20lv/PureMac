@@ -80,14 +80,52 @@ struct CategoryDetailView: View {
     // MARK: - File List
 
     private func fileList(_ result: CategoryResult) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 4) {
-                ForEach(result.items) { item in
-                    FileRow(item: item, color: category.color)
+        VStack(spacing: 0) {
+            // Select all / Deselect all bar
+            HStack(spacing: 16) {
+                let selectedCount = vm.selectedCountInCategory(category)
+                let totalCount = result.itemCount
+
+                Text("\(selectedCount) of \(totalCount) selected")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(.pmTextMuted)
+
+                Spacer()
+
+                Button("Select All") {
+                    vm.selectAllInCategory(category)
                 }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.pmAccentLight)
+                .buttonStyle(.plain)
+
+                Text("|")
+                    .foregroundColor(.pmSeparator)
+                    .font(.system(size: 11))
+
+                Button("Deselect All") {
+                    vm.deselectAllInCategory(category)
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.pmAccentLight)
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, 48)
             .padding(.vertical, 8)
+
+            Divider()
+                .background(Color.pmSeparator)
+                .padding(.horizontal, 32)
+
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(result.items) { item in
+                        FileRow(item: item, color: category.color)
+                    }
+                }
+                .padding(.horizontal, 32)
+                .padding(.vertical, 8)
+            }
         }
     }
 
@@ -155,14 +193,18 @@ struct CategoryDetailView: View {
                 }
             }
 
-            if let result = result, result.totalSize > 0 && !vm.scanState.isActive {
-                GradientActionButton(
-                    title: "Clean (\(result.formattedSize))",
-                    icon: "trash.fill",
-                    gradient: AppGradients.accent
-                ) {
-                    withAnimation(.pmSpring) {
-                        vm.cleanCategory(category)
+            if let _ = result, !vm.scanState.isActive {
+                let selectedSize = vm.selectedSizeInCategory(category)
+                let selectedCount = vm.selectedCountInCategory(category)
+                if selectedSize > 0 {
+                    GradientActionButton(
+                        title: "Clean \(selectedCount) items (\(ByteCountFormatter.string(fromByteCount: selectedSize, countStyle: .file)))",
+                        icon: "trash.fill",
+                        gradient: AppGradients.accent
+                    ) {
+                        withAnimation(.pmSpring) {
+                            vm.cleanCategory(category)
+                        }
                     }
                 }
             }
@@ -173,24 +215,49 @@ struct CategoryDetailView: View {
 // MARK: - File Row
 
 struct FileRow: View {
+    @EnvironmentObject var vm: AppViewModel
     let item: CleanableItem
     let color: Color
 
     @State private var isHovering = false
 
+    var isSelected: Bool {
+        vm.isItemSelected(item)
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
+            // Checkbox
+            Button(action: { vm.toggleItem(item) }) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(isSelected ? color : Color.pmTextMuted, lineWidth: 1.5)
+                        .frame(width: 18, height: 18)
+
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(color)
+                            .frame(width: 18, height: 18)
+
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+
             // File icon
             Image(systemName: fileIcon)
                 .font(.system(size: 14))
-                .foregroundColor(color.opacity(0.7))
-                .frame(width: 24)
+                .foregroundColor(isSelected ? color.opacity(0.7) : .pmTextMuted)
+                .frame(width: 20)
 
             // File info
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.pmBody)
-                    .foregroundColor(.pmTextPrimary)
+                    .foregroundColor(isSelected ? .pmTextPrimary : .pmTextMuted)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
@@ -213,7 +280,7 @@ struct FileRow: View {
             // Size
             Text(item.formattedSize)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundColor(.pmTextPrimary)
+                .foregroundColor(isSelected ? .pmTextPrimary : .pmTextMuted)
                 .frame(width: 70, alignment: .trailing)
 
             // Reveal button on hover
